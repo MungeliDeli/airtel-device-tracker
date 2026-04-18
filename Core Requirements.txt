@@ -1,0 +1,18 @@
+Airtel Installation Tracker — Plan
+Core Functional Requirements
+1. Device Sign-Out Tracking
+•	Installer submits their name + IMEI via Google Form (scanned by barcode app)
+•	Each submission is timestamped and tied to a shop/installer
+2. Installation Tracking
+•	Supervisor downloads KoboToolbox submissions as CSV
+•	System reads and extracts: installer name, IMEI, install date/time
+3. Reconciliation Engine
+•	Match signed-out IMEIs against installed IMEIs
+•	For each installer show: signed for, installed, and unaccounted devices
+•	Flag devices signed but not installed (with how long ago they were signed)
+4. Reporting Dashboard
+•	Filter by day or week
+•	Per-installer breakdown: signed / installed / pending
+•	Team summary view for the supervisor
+•	Export-ready (CSV or printable)
+
