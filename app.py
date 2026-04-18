@@ -218,6 +218,18 @@ if app_mode == "Team Performance":
         })
         
     stats_df = pd.DataFrame(team_stats).sort_values("All Time Installations", ascending=False)
+    
+    # Add Total Row
+    total_row = pd.DataFrame([{
+        "Team Name": "TOTAL",
+        "CUG": "-",
+        "Today's Installations": stats_df["Today's Installations"].sum(),
+        "This Week's Installations": stats_df["This Week's Installations"].sum(),
+        "This Month's Installations": stats_df["This Month's Installations"].sum(),
+        "All Time Installations": stats_df["All Time Installations"].sum()
+    }])
+    stats_df = pd.concat([stats_df, total_row], ignore_index=True)
+    
     st.dataframe(stats_df, use_container_width=True, hide_index=True)
     
     st.markdown('<div class="section-title">🔍 Installer Drill-Down</div>', unsafe_allow_html=True)
@@ -247,6 +259,10 @@ if app_mode == "Team Performance":
         else: # This month
             filtered_df = installer_df[installer_df["date"] >= start_of_month]
             
+        count = len(filtered_df)
+        time_label = time_filter.lower()
+        st.markdown(f"**{count} installation{'s' if count != 1 else ''} {time_label}**")
+        
         if filtered_df.empty:
             st.info(f"No installations found for {selected_name} for {time_filter.lower()}.")
         else:
