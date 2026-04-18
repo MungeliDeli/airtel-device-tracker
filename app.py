@@ -111,6 +111,21 @@ def load_signout(file):
     return df
 
 
+def detect_file_type(df):
+    cols = {c.strip().lower() for c in df.columns}
+    kobo_keys = {v.strip().lower() for v in KOBO_COLS.values()}
+    form_keys = {v.strip().lower() for v in FORM_COLS.values()}
+    if kobo_keys.issubset(cols):
+        return "kobo"
+    if form_keys.issubset(cols):
+        return "signout"
+    if len(kobo_keys & cols) >= 4:
+        return "kobo"
+    if len(form_keys & cols) >= 2:
+        return "signout"
+    return None
+
+
 def filter_by_date(df, col="date"):
     return df[(df[col] >= date_from) & (df[col] <= date_to)]
 
@@ -218,8 +233,57 @@ if kobo_file and not signout_file:
 
 # ── SIGN-OUT ONLY ───────────────────────────────────────────────────────────────
 if signout_file and not kobo_file:
-    st.info("Showing **sign-out data only**. Upload the Kobo file to reconcile installations.", icon="ℹ️")
+    signout = None
+    df = read_file(signout_file)
+    detected = detect_file_type(df) if df is not None else None
 
+    if detected == "kobo":
+        st.warning("This upload looks like a Kobo export. Showing Kobo installations instead.")
+        kobo = load_kobo(signout_file)
+
+        if debug:
+            if kobo is not None:
+                st.success(f"✅ Kobo loaded: {len(kobo)} rows")
+                st.write("**Column names found:**", list(kobo.columns))
+                st.write("**First 3 rows:**")
+                st.dataframe(kobo.head(3))
+            else:
+                st.warning("Kobo returned None — see error above.")
+
+        if kobo is None:
+            st.stop()
+
+        kobo_f = filter_by_date(kobo)
+
+        if debug:
+            st.info(f"After date filter ({date_from} → {date_to}): {len(kobo_f)} rows")
+
+        if kobo_f.empty:
+            st.warning(f"No installations found between {date_from} and {date_to}. Try changing the date filter.")
+            st.stop()
+
+        st.markdown(f"### Installations — {date_from} to {date_to}")
+        installers = ["All"] + sorted(kobo_f["cug"].dropna().unique().tolist())
+        selected   = st.selectbox("Filter by installer CUG", installers)
+        view = kobo_f if selected == "All" else kobo_f[kobo_f["cug"] == selected]
+
+        disp = view.rename(columns={
+            "cug":"Installer CUG","phone":"Customer Phone",
+            "area":"Area","imei":"IMEI","odu":"ODU Number","date":"Date"
+        })
+        st.dataframe(disp[["Installer CUG","Customer Phone","Area","IMEI","ODU Number","Date"]],
+                     use_container_width=True, hide_index=True)
+
+        st.markdown('<div class="section-title">Team Performance</div>', unsafe_allow_html=True)
+        summary = (kobo_f.groupby("cug")
+                   .agg(Installed=("imei","count"))
+                   .reset_index()
+                   .rename(columns={"cug":"Installer CUG"})
+                   .sort_values("Installed", ascending=False))
+        st.dataframe(summary, use_container_width=True, hide_index=True)
+        st.stop()
+
+    st.info("Showing **sign-out data only**. Upload the Kobo file to reconcile installations.", icon="ℹ️")
     signout = load_signout(signout_file)
 
     if debug:
