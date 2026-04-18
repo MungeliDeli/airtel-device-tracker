@@ -5,14 +5,11 @@ import io
 
 st.set_page_config(page_title="Airtel Shop Tracker", page_icon="📡", layout="wide")
 
-# ── Styling ───────────────────────────────────────────────────────────────────
 st.markdown("""
 <style>
 .metric-card {
-    background: #f8f9fa;
-    border-radius: 10px;
-    padding: 16px 20px;
-    border-left: 4px solid #e0e0e0;
+    background: #f8f9fa; border-radius: 10px;
+    padding: 16px 20px; border-left: 4px solid #e0e0e0;
 }
 .metric-card.green  { border-left-color: #2ecc71; }
 .metric-card.blue   { border-left-color: #3498db; }
@@ -28,8 +25,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Column names — edit if your export headers ever change ────────────────────
-
+# ── Column names ──────────────────────────────────────────────────────────────
 KOBO_COLS = {
     "cug":   "Installer Number (CUG)",
     "phone": "Correct Customer Phone Number",
@@ -38,7 +34,6 @@ KOBO_COLS = {
     "odu":   "ODU Number",
     "date":  "Submission Date",
 }
-
 FORM_COLS = {
     "cug":  "Installer CUG",
     "imei": "IMEI Number",
@@ -46,13 +41,12 @@ FORM_COLS = {
 }
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
-
 def read_file(file):
     name = file.name.lower()
     try:
         if name.endswith(".xlsx") or name.endswith(".xls"):
             df = pd.read_excel(file, dtype=str, engine="openpyxl")
-        elif name.endswith(".csv"):
+        else:
             raw = file.read()
             for enc in ("utf-8", "utf-8-sig", "latin-1", "cp1252"):
                 try:
@@ -62,17 +56,14 @@ def read_file(file):
                     continue
             df = pd.read_csv(io.StringIO(text), dtype=str,
                              on_bad_lines="skip", engine="python")
-        else:
-            st.error(f"Unsupported file type: `{file.name}`. Upload an .xlsx or .csv file.")
-            return None
     except Exception as e:
-        st.error(f"Could not read `{file.name}`: {e}")
+        st.error(f"❌ Failed to read `{file.name}`: {e}")
         return None
     df.columns = df.columns.str.strip()
     return df
 
 
-def resolve_columns(df, needed):
+def resolve_columns(df, needed, label="file"):
     col_lookup = {c.strip().lower(): c for c in df.columns}
     rename_map = {}
     missing = []
@@ -86,21 +77,17 @@ def resolve_columns(df, needed):
             else:
                 missing.append(canonical)
     if missing:
-        st.error(
-            f"Could not find these columns: `{missing}`\n\n"
-            f"Columns in the file: `{list(df.columns)}`\n\n"
-            "Update the column names at the top of `app.py` to match."
-        )
+        st.error(f"❌ **{label}** — could not find columns: `{missing}`")
+        st.info(f"Columns found in file: `{list(df.columns)}`")
         return None
-    df = df.rename(columns=rename_map)
-    return df[list(needed.keys())].copy()
+    return df.rename(columns=rename_map)[list(needed.keys())].copy()
 
 
 def load_kobo(file):
     df = read_file(file)
     if df is None:
         return None
-    df = resolve_columns(df, KOBO_COLS)
+    df = resolve_columns(df, KOBO_COLS, label="Kobo file")
     if df is None:
         return None
     df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
@@ -113,7 +100,7 @@ def load_signout(file):
     df = read_file(file)
     if df is None:
         return None
-    df = resolve_columns(df, FORM_COLS)
+    df = resolve_columns(df, FORM_COLS, label="Sign-out file")
     if df is None:
         return None
     df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
@@ -141,12 +128,10 @@ with st.sidebar:
     kobo_file = st.file_uploader(
         "1. KoboToolbox export (.xlsx)",
         type=["xlsx", "xls", "csv"],
-        help="KoboToolbox → Data → Downloads → XLS → open in Excel → Save As xlsx."
     )
     signout_file = st.file_uploader(
         "2. Sign-out file (Google Sheet export)",
         type=["xlsx", "xls", "csv"],
-        help="Google Sheet → File → Download → xlsx or csv."
     )
     st.divider()
     st.header("🗓 Date Filter")
@@ -161,15 +146,52 @@ with st.sidebar:
         date_from = st.date_input("From", today - timedelta(days=7))
         date_to   = st.date_input("To",   today)
     st.divider()
+
+    # ── DEBUG TOGGLE ──────────────────────────────────────────────────────────
+    debug = st.checkbox("🛠 Show debug info", value=False)
     st.caption("Built for Airtel Shop Supervisor")
 
-# ── KOBO ONLY — installations browse ─────────────────────────────────────────
+# ── LANDING ───────────────────────────────────────────────────────────────────
+if not kobo_file and not signout_file:
+    st.markdown("""
+    ### How to use this app
+    **Step 1 — Kobo file:** KoboToolbox → Data → Downloads → **XLS** → open in Excel → Save As → **.xlsx** → upload here.
+
+    **Step 2 — Sign-out file:** Google Sheet → File → Download → **.xlsx** → upload here.
+
+    **Step 3:** Set the date filter. Report is ready instantly.
+
+    ---
+    > You can upload **just the Kobo file** to browse installations without reconciliation.
+    """)
+    st.stop()
+
+# ── KOBO ONLY ─────────────────────────────────────────────────────────────────
 if kobo_file and not signout_file:
     st.info("Showing **installations only**. Upload the sign-out file too to enable reconciliation.", icon="ℹ️")
+
     kobo = load_kobo(kobo_file)
+
+    if debug:
+        if kobo is not None:
+            st.success(f"✅ Kobo loaded: {len(kobo)} rows")
+            st.write("**Column names found:**", list(kobo.columns))
+            st.write("**First 3 rows:**")
+            st.dataframe(kobo.head(3))
+        else:
+            st.warning("Kobo returned None — see error above.")
+
     if kobo is None:
         st.stop()
+
     kobo_f = filter_by_date(kobo)
+
+    if debug:
+        st.info(f"After date filter ({date_from} → {date_to}): {len(kobo_f)} rows")
+
+    if kobo_f.empty:
+        st.warning(f"No installations found between {date_from} and {date_to}. Try changing the date filter.")
+        st.stop()
 
     st.markdown(f"### Installations — {date_from} to {date_to}")
     installers = ["All"] + sorted(kobo_f["cug"].dropna().unique().tolist())
@@ -192,21 +214,40 @@ if kobo_file and not signout_file:
     st.dataframe(summary, use_container_width=True, hide_index=True)
     st.stop()
 
-# ── FULL MODE — reconciliation ────────────────────────────────────────────────
+# ── FULL MODE ─────────────────────────────────────────────────────────────────
 if kobo_file and signout_file:
     kobo    = load_kobo(kobo_file)
     signout = load_signout(signout_file)
+
+    if debug:
+        if kobo is not None:
+            st.success(f"✅ Kobo loaded: {len(kobo)} rows")
+            st.write("**Kobo columns:**", list(kobo.columns))
+            st.dataframe(kobo.head(3))
+        if signout is not None:
+            st.success(f"✅ Sign-out loaded: {len(signout)} rows")
+            st.write("**Sign-out columns:**", list(signout.columns))
+            st.dataframe(signout.head(3))
+
     if kobo is None or signout is None:
         st.stop()
 
     kobo_f    = filter_by_date(kobo)
     signout_f = filter_by_date(signout)
 
+    if debug:
+        st.info(f"Kobo after filter: {len(kobo_f)} rows | Sign-out after filter: {len(signout_f)} rows")
+
+    if kobo_f.empty and signout_f.empty:
+        st.warning(f"No data found between {date_from} and {date_to}. Try changing the date filter.")
+        st.stop()
+
     merged = signout_f.merge(
         kobo_f[["imei","phone","area","odu","date"]].rename(columns={"date":"install_date"}),
         on="imei", how="left"
     )
-    merged["status"]             = merged["install_date"].apply(lambda x: "✅ Installed" if pd.notna(x) else "⚠️ Not installed")
+    merged["status"]             = merged["install_date"].apply(
+        lambda x: "✅ Installed" if pd.notna(x) else "⚠️ Not installed")
     merged["days_since_signout"] = merged["date"].apply(days_ago)
 
     total_signed    = len(signout_f)
@@ -229,10 +270,10 @@ if kobo_file and signout_file:
 
     st.markdown("")
 
-    # Per-installer table
     st.markdown('<div class="section-title">👷 Per-Installer Performance</div>', unsafe_allow_html=True)
     perf = (merged.groupby("cug")
-            .agg(Signed=("imei","count"), Installed=("install_date", lambda x: x.notna().sum()))
+            .agg(Signed=("imei","count"),
+                 Installed=("install_date", lambda x: x.notna().sum()))
             .reset_index())
     perf["Pending"]      = perf["Signed"] - perf["Installed"]
     perf["Completion %"] = (perf["Installed"] / perf["Signed"] * 100).round(0).astype(int)
@@ -245,7 +286,6 @@ if kobo_file and signout_file:
 
     st.dataframe(perf.style.apply(highlight, axis=1), use_container_width=True, hide_index=True)
 
-    # Drill-down
     st.markdown('<div class="section-title">🔍 Installer Drill-Down</div>', unsafe_allow_html=True)
     options      = ["All"] + sorted(merged["cug"].dropna().unique().tolist())
     selected_cug = st.selectbox("Select installer", options)
@@ -259,49 +299,25 @@ if kobo_file and signout_file:
     st.dataframe(
         disp[["Installer CUG","IMEI","ODU Number","Customer Phone","Area",
               "Sign-out Date","Install Date","Status","Signed"]],
-        use_container_width=True, hide_index=True
-    )
+        use_container_width=True, hide_index=True)
 
-    # Flagged
     flagged = merged[merged["install_date"].isna()].copy()
     if not flagged.empty:
         st.markdown(f'<div class="section-title">🚨 Flagged — Signed But Not Installed ({len(flagged)})</div>', unsafe_allow_html=True)
         flag_disp = flagged[["cug","imei","date","days_since_signout"]].rename(columns={
             "cug":"Installer CUG","imei":"IMEI",
-            "date":"Sign-out Date","days_since_signout":"How long ago"
-        })
+            "date":"Sign-out Date","days_since_signout":"How long ago"})
         st.dataframe(flag_disp, use_container_width=True, hide_index=True)
     else:
         st.success("✅ All signed-out devices have been installed.")
 
-    # Export
     st.markdown('<div class="section-title">📥 Export Report</div>', unsafe_allow_html=True)
     export_df = merged.rename(columns={
         "cug":"Installer CUG","imei":"IMEI","odu":"ODU Number",
         "phone":"Customer Phone","area":"Area",
-        "date":"Sign-out Date","install_date":"Install Date","status":"Status"
-    })
+        "date":"Sign-out Date","install_date":"Install Date","status":"Status"})
     st.download_button(
         label="⬇️ Download full reconciliation CSV",
         data=export_df.to_csv(index=False).encode(),
         file_name=f"airtel_report_{date_from}_to_{date_to}.csv",
-        mime="text/csv"
-    )
-
-# ── LANDING ───────────────────────────────────────────────────────────────────
-if not kobo_file and not signout_file:
-    st.markdown("""
-    ### How to use this app
-
-    **Step 1 — Kobo file**
-    KoboToolbox → Data → Downloads → **XLS**.
-    Open in Excel → Save As → **.xlsx**. Upload that here.
-
-    **Step 2 — Sign-out file**
-    Google Sheet → File → Download → **.xlsx** (or csv). Upload that here.
-
-    **Step 3** — Set the date filter. Your report is ready instantly.
-
-    ---
-    > You can upload **just the Kobo file** to browse installations without reconciliation.
-    """)
+        mime="text/csv")
