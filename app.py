@@ -234,8 +234,9 @@ if app_mode == "Team Performance":
     
     st.markdown('<div class="section-title">🔍 Installer Drill-Down</div>', unsafe_allow_html=True)
     
-    # Selectbox for installer
-    installer_options = [f"{row['Team Name']} (CUG: {row['CUG']})" for _, row in stats_df.iterrows()]
+    # Selectbox for installer (exclude TOTAL row)
+    drill_stats = stats_df[stats_df["Team Name"] != "TOTAL"]
+    installer_options = [f"{row['Team Name']} (CUG: {row['CUG']})" for _, row in drill_stats.iterrows()]
     selected_option = st.selectbox("Select Installer to Drill Down", installer_options)
     
     # Extract CUG from selection
@@ -247,7 +248,7 @@ if app_mode == "Team Performance":
     # Filter for the drill-down
     col1, col2 = st.columns([1, 4])
     with col1:
-        time_filter = st.radio("Filter Installations:", ["Today", "This week", "This month"])
+        time_filter = st.radio("Filter Installations:", ["Today", "This week", "This month"], index=2)
     
     with col2:
         installer_df = kobo_team[kobo_team["cug"] == selected_cug].copy()
