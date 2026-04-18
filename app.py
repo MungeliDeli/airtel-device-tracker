@@ -44,8 +44,10 @@ FORM_COLS = {
 def read_file(file):
     name = file.name.lower()
     try:
-        if name.endswith(".xlsx") or name.endswith(".xls"):
+        if name.endswith(".xlsx"):
             df = pd.read_excel(file, dtype=str, engine="openpyxl")
+        elif name.endswith(".xls"):
+            df = pd.read_excel(file, dtype=str)
         else:
             raw = file.read()
             for enc in ("utf-8", "utf-8-sig", "latin-1", "cp1252"):
@@ -211,6 +213,53 @@ if kobo_file and not signout_file:
                .reset_index()
                .rename(columns={"cug":"Installer CUG"})
                .sort_values("Installed", ascending=False))
+    st.dataframe(summary, use_container_width=True, hide_index=True)
+    st.stop()
+
+# ── SIGN-OUT ONLY ───────────────────────────────────────────────────────────────
+if signout_file and not kobo_file:
+    st.info("Showing **sign-out data only**. Upload the Kobo file to reconcile installations.", icon="ℹ️")
+
+    signout = load_signout(signout_file)
+
+    if debug:
+        if signout is not None:
+            st.success(f"✅ Sign-out loaded: {len(signout)} rows")
+            st.write("**Column names found:**", list(signout.columns))
+            st.write("**First 3 rows:**")
+            st.dataframe(signout.head(3))
+        else:
+            st.warning("Sign-out returned None — see error above.")
+
+    if signout is None:
+        st.stop()
+
+    signout_f = filter_by_date(signout)
+
+    if debug:
+        st.info(f"Sign-out after date filter ({date_from} → {date_to}): {len(signout_f)} rows")
+
+    if signout_f.empty:
+        st.warning(f"No sign-outs found between {date_from} and {date_to}. Try changing the date filter.")
+        st.stop()
+
+    st.markdown(f"### Sign-outs — {date_from} to {date_to}")
+    installers = ["All"] + sorted(signout_f["cug"].dropna().unique().tolist())
+    selected   = st.selectbox("Filter by installer CUG", installers)
+    view = signout_f if selected == "All" else signout_f[signout_f["cug"] == selected]
+
+    disp = view.rename(columns={
+        "cug":"Installer CUG","imei":"IMEI","date":"Sign-out Date"
+    })
+    st.dataframe(disp[["Installer CUG","IMEI","Sign-out Date"]],
+                 use_container_width=True, hide_index=True)
+
+    st.markdown('<div class="section-title">Team Performance</div>', unsafe_allow_html=True)
+    summary = (signout_f.groupby("cug")
+               .agg(Signed_Out=("imei","count"))
+               .reset_index()
+               .rename(columns={"cug":"Installer CUG"})
+               .sort_values("Signed_Out", ascending=False))
     st.dataframe(summary, use_container_width=True, hide_index=True)
     st.stop()
 
