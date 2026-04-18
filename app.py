@@ -146,6 +146,28 @@ def days_ago(d, today):
     delta = (today - d).days
     return "Today" if delta == 0 else f"{delta}d ago"
 
+def show_missing_installations(kobo_df):
+    cug_m = kobo_df["cug"].isna() | kobo_df["cug"].astype(str).str.strip().isin(["", "nan", "None"])
+    phone_m = kobo_df["phone"].isna() | kobo_df["phone"].astype(str).str.strip().isin(["", "nan", "None"])
+    odu_m = kobo_df["odu"].isna() | kobo_df["odu"].astype(str).str.strip().isin(["", "nan", "None"])
+    imei_str = kobo_df["imei"].astype(str).str.strip()
+    imei_m = imei_str.isna() | imei_str.isin(["", "nan", "None"]) | (imei_str.str.len() < 14)
+    
+    missing_df = kobo_df[cug_m | phone_m | odu_m | imei_m].copy()
+    if not missing_df.empty:
+        st.markdown(f'<div class="section-title">⚠️ Data Quality Issues ({len(missing_df)})</div>', unsafe_allow_html=True)
+        st.error("The following installations have a missing or incomplete CUG, Phone, ODU, or IMEI (IMEI must be at least 14 characters).")
+        disp = missing_df.rename(columns={
+            "cug": "Installer CUG",
+            "phone": "Customer Phone",
+            "area": "Area",
+            "imei": "IMEI",
+            "odu": "ODU Number",
+            "date": "Date"
+        })
+        st.dataframe(disp[["Installer CUG", "Customer Phone", "Area", "IMEI", "ODU Number", "Date"]], 
+                     use_container_width=True, hide_index=True)
+
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 st.title("📡 Airtel Shop Tracker")
 st.caption("Track device sign-outs and team installation performance.")
@@ -280,6 +302,8 @@ if app_mode == "Team Performance":
                 use_container_width=True, 
                 hide_index=True
             )
+            
+    show_missing_installations(kobo)
 
 # ── DEVICE MANAGEMENT (Reconciliation) ─────────────────────────────────────────
 elif app_mode == "Device Management":
@@ -353,6 +377,8 @@ elif app_mode == "Device Management":
                    .rename(columns={"cug":"Installer CUG"})
                    .sort_values("Installed", ascending=False))
         st.dataframe(summary, use_container_width=True, hide_index=True)
+        
+        show_missing_installations(kobo_f)
         st.stop()
 
     # ── SIGN-OUT ONLY ──
@@ -382,6 +408,8 @@ elif app_mode == "Device Management":
             })
             st.dataframe(disp[["Installer CUG","Customer Phone","Area","IMEI","ODU Number","Date"]],
                          use_container_width=True, hide_index=True)
+            
+            show_missing_installations(kobo_f)
             st.stop()
 
         st.info("Showing **sign-out data only**. Upload the Kobo file to reconcile installations.", icon="ℹ️")
@@ -496,6 +524,8 @@ elif app_mode == "Device Management":
             st.dataframe(flag_disp, use_container_width=True, hide_index=True)
         else:
             st.success("✅ All signed-out devices have been installed.")
+
+        show_missing_installations(kobo_f)
 
         st.markdown('<div class="section-title">📥 Export Report</div>', unsafe_allow_html=True)
         export_df = merged.rename(columns={
