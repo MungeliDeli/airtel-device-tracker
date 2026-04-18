@@ -219,24 +219,25 @@ if app_mode == "Team Performance":
         
     stats_df = pd.DataFrame(team_stats).sort_values("All Time Installations", ascending=False)
     
-    # Add Total Row
-    total_row = pd.DataFrame([{
-        "Team Name": "TOTAL",
-        "CUG": "-",
-        "Today's Installations": stats_df["Today's Installations"].sum(),
-        "This Week's Installations": stats_df["This Week's Installations"].sum(),
-        "This Month's Installations": stats_df["This Month's Installations"].sum(),
-        "All Time Installations": stats_df["All Time Installations"].sum()
-    }])
-    stats_df = pd.concat([stats_df, total_row], ignore_index=True)
+    # Team Totals
+    t_today = stats_df["Today's Installations"].sum()
+    t_week = stats_df["This Week's Installations"].sum()
+    t_month = stats_df["This Month's Installations"].sum()
+    t_all = stats_df["All Time Installations"].sum()
     
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Today's Total", t_today)
+    c2.metric("This Week's Total", t_week)
+    c3.metric("This Month's Total", t_month)
+    c4.metric("All Time Total", t_all)
+    
+    st.markdown("<br>", unsafe_allow_html=True)
     st.dataframe(stats_df, use_container_width=True, hide_index=True)
     
     st.markdown('<div class="section-title">🔍 Installer Drill-Down</div>', unsafe_allow_html=True)
     
-    # Selectbox for installer (exclude TOTAL row)
-    drill_stats = stats_df[stats_df["Team Name"] != "TOTAL"]
-    installer_options = [f"{row['Team Name']} (CUG: {row['CUG']})" for _, row in drill_stats.iterrows()]
+    # Selectbox for installer
+    installer_options = [f"{row['Team Name']} (CUG: {row['CUG']})" for _, row in stats_df.iterrows()]
     selected_option = st.selectbox("Select Installer to Drill Down", installer_options)
     
     # Extract CUG from selection
