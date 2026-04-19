@@ -222,7 +222,7 @@ if app_mode == "Team Performance":
     if not month_stats.empty:
         top_installer = month_stats.loc[month_stats["This Month's Installations"].idxmax()]
         st.markdown(f"""
-        <div style="background-color: #262730; border: 1px solid #e0e0e0; border-left: 5px solid #e74c3c; padding: 20px; border-radius: 10px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between;">
+        <div style="background-color: #262730;  border-left: 5px solid #e0e0e0; padding: 20px; border-radius: 10px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between;">
             <div>
                 <div  font-size: 1.25rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px;">Top Installer This Month</div>
                 <div style="font-size: 1.8rem; font-weight: 700;  margin: 0;">{top_installer['Team Name']}</div>
