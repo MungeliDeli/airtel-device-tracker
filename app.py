@@ -44,6 +44,7 @@ TEAM_MEMBERS = {
 
 KOBO_COLS = {
     "cug":   "Installer Number (CUG)",
+    "customer": "Customer Name",
     "phone": "Correct Customer Phone Number",
     "area":  "Area of Installation",
     "imei":  "IIMEI Number",
@@ -93,10 +94,10 @@ def resolve_columns(df, needed, label="file"):
                 rename_map[col_lookup[fuzzy]] = key
             else:
                 missing.append(canonical)
+                df[canonical] = "Unknown"
+                rename_map[canonical] = key
     if missing:
-        st.error(f"❌ **{label}** — could not find columns: `{missing}`")
-        st.info(f"Columns found in file: `{list(df.columns)}`")
-        return None
+        st.warning(f"⚠️ **{label}** — missing expected columns: {missing}. These will be marked as 'Unknown'.")
     return df.rename(columns=rename_map)[list(needed.keys())].copy()
 
 def load_kobo(file):
@@ -146,28 +147,6 @@ def days_ago(d, today):
     delta = (today - d).days
     return "Today" if delta == 0 else f"{delta}d ago"
 
-def show_missing_installations(kobo_df):
-    cug_m = kobo_df["cug"].isna() | kobo_df["cug"].astype(str).str.strip().isin(["", "nan", "None"])
-    phone_m = kobo_df["phone"].isna() | kobo_df["phone"].astype(str).str.strip().isin(["", "nan", "None"])
-    odu_m = kobo_df["odu"].isna() | kobo_df["odu"].astype(str).str.strip().isin(["", "nan", "None"])
-    imei_str = kobo_df["imei"].astype(str).str.strip()
-    imei_m = imei_str.isna() | imei_str.isin(["", "nan", "None"]) | (imei_str.str.len() < 14)
-    
-    missing_df = kobo_df[cug_m | phone_m | odu_m | imei_m].copy()
-    if not missing_df.empty:
-        st.markdown(f'<div class="section-title">⚠️ Data Quality Issues ({len(missing_df)})</div>', unsafe_allow_html=True)
-        st.error("The following installations have a missing or incomplete CUG, Phone, ODU, or IMEI (IMEI must be at least 14 characters).")
-        disp = missing_df.rename(columns={
-            "cug": "Installer CUG",
-            "phone": "Customer Phone",
-            "area": "Area",
-            "imei": "IMEI",
-            "odu": "ODU Number",
-            "date": "Date"
-        })
-        st.dataframe(disp[["Installer CUG", "Customer Phone", "Area", "IMEI", "ODU Number", "Date"]], 
-                     use_container_width=True, hide_index=True)
-
 # ── Sidebar ───────────────────────────────────────────────────────────────────
 st.title("📡 Airtel Shop Tracker")
 st.caption("Track device sign-outs and team installation performance.")
@@ -214,8 +193,6 @@ if app_mode == "Team Performance":
         st.warning("No data found for the specified team members in this file.")
         st.stop()
 
-    st.markdown('<div class="section-title">🏆 Overall Team Performance</div>', unsafe_allow_html=True)
-    
     # Calculate performance metrics
     today = today_dt
     start_of_week = today - timedelta(days=today.weekday())
@@ -240,6 +217,19 @@ if app_mode == "Team Performance":
         })
         
     stats_df = pd.DataFrame(team_stats).sort_values("All Time Installations", ascending=False)
+    
+    month_stats = stats_df[stats_df["This Month's Installations"] > 0]
+    if not month_stats.empty:
+        top_installer = month_stats.loc[month_stats["This Month's Installations"].idxmax()]
+        st.markdown(f"""
+        <div style="background: linear-gradient(135deg, #FFD700 0%, #FDB931 100%); padding: 20px; border-radius: 10px; color: #000; text-align: center; margin-bottom: 20px;">
+            <h2 style="margin:0; font-size: 1.5rem;">🌟 Top Installer This Month 🌟</h2>
+            <h1 style="margin:5px 0 0 0; font-size: 2.5rem;">{top_installer['Team Name']}</h1>
+            <p style="margin:0; font-size: 1.2rem;">{top_installer["This Month's Installations"]} Installations</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown('<div class="section-title">🏆 Overall Team Performance</div>', unsafe_allow_html=True)
     
     # Team Totals
     t_today = stats_df["Today's Installations"].sum()
@@ -291,6 +281,7 @@ if app_mode == "Team Performance":
             st.info(f"No installations found for {selected_name} for {time_filter.lower()}.")
         else:
             disp_df = filtered_df.rename(columns={
+                "customer": "Customer Name",
                 "phone": "Correct Customer Phone Number",
                 "area": "Area of Installation",
                 "imei": "IIMEI Number",
@@ -298,12 +289,10 @@ if app_mode == "Team Performance":
                 "date": "Submission Date"
             })
             st.dataframe(
-                disp_df[["Correct Customer Phone Number", "Area of Installation", "IIMEI Number", "ODU Number", "Submission Date"]],
+                disp_df[["Customer Name", "Correct Customer Phone Number", "Area of Installation", "IIMEI Number", "ODU Number", "Submission Date"]],
                 use_container_width=True, 
                 hide_index=True
             )
-            
-    show_missing_installations(kobo)
 
 # ── DEVICE MANAGEMENT (Reconciliation) ─────────────────────────────────────────
 elif app_mode == "Device Management":
@@ -377,8 +366,6 @@ elif app_mode == "Device Management":
                    .rename(columns={"cug":"Installer CUG"})
                    .sort_values("Installed", ascending=False))
         st.dataframe(summary, use_container_width=True, hide_index=True)
-        
-        show_missing_installations(kobo_f)
         st.stop()
 
     # ── SIGN-OUT ONLY ──
@@ -408,8 +395,6 @@ elif app_mode == "Device Management":
             })
             st.dataframe(disp[["Installer CUG","Customer Phone","Area","IMEI","ODU Number","Date"]],
                          use_container_width=True, hide_index=True)
-            
-            show_missing_installations(kobo_f)
             st.stop()
 
         st.info("Showing **sign-out data only**. Upload the Kobo file to reconcile installations.", icon="ℹ️")
@@ -524,8 +509,6 @@ elif app_mode == "Device Management":
             st.dataframe(flag_disp, use_container_width=True, hide_index=True)
         else:
             st.success("✅ All signed-out devices have been installed.")
-
-        show_missing_installations(kobo_f)
 
         st.markdown('<div class="section-title">📥 Export Report</div>', unsafe_allow_html=True)
         export_df = merged.rename(columns={
