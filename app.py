@@ -50,7 +50,7 @@ KOBO_COLS = {
     "phone": "Customer_Phone_Number",
     "area":  "Area_of_Installation",
     "imei":  "ODU_IMEI_Number",
-    "odu":   "ODU_Number",
+    "odu":   "ODU_IMEI_Number",
     "date":  "_submission_time",
 }
 FORM_COLS = {
@@ -85,32 +85,28 @@ def read_file(file):
 
 def resolve_columns(df, needed, label="file"):
     col_lookup = {c.strip().lower(): c for c in df.columns}
-    rename_map = {}
-    missing = []
     
     def clean_str(s): 
         return re.sub(r'[^a-z0-9]', '', str(s).lower())
         
     clean_lookup = {clean_str(c): c for c in df.columns}
 
+    out_df = pd.DataFrame()
+
     for key, canonical in needed.items():
         canonical_fuzzy = canonical.strip().lower()
         canonical_clean = clean_str(canonical)
         
         if canonical in df.columns:
-            rename_map[canonical] = key
+            out_df[key] = df[canonical]
         elif canonical_fuzzy in col_lookup:
-            rename_map[col_lookup[canonical_fuzzy]] = key
+            out_df[key] = df[col_lookup[canonical_fuzzy]]
         elif canonical_clean in clean_lookup:
-            rename_map[clean_lookup[canonical_clean]] = key
+            out_df[key] = df[clean_lookup[canonical_clean]]
         else:
-            missing.append(canonical)
-            df[canonical] = "Unknown"
-            rename_map[canonical] = key
-    if missing:
-        st.warning(f"⚠️ **{label}** — missing expected columns: {missing}. These will be marked as 'Unknown'.")
-        st.info(f"**Available columns in the raw data:** {df.columns.tolist()}")
-    return df.rename(columns=rename_map)[list(needed.keys())].copy()
+            out_df[key] = "Unknown"
+
+    return out_df
 
 @st.cache_data(ttl=600)
 def fetch_kobo_data():
@@ -130,10 +126,14 @@ def fetch_kobo_data():
     headers = {"Authorization": f"Token {token}"}
     
     try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json()
-        results = data.get("results", [])
+        results = []
+        while url:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            results.extend(data.get("results", []))
+            url = data.get("next")
+            
         if not results:
             st.warning("⚠️ No data found in the Kobo form.")
             return pd.DataFrame()
@@ -239,7 +239,6 @@ if app_mode == "Team Performance":
     
     if kobo_team.empty:
         st.warning("No data found for the specified team members in this file.")
-        st.info(f"**Debug - Unique CUGs in data:** {kobo['cug'].unique().tolist()}")
         st.stop()
 
     # Calculate performance metrics
