@@ -222,10 +222,15 @@ if app_mode == "Team Performance":
     if not month_stats.empty:
         top_installer = month_stats.loc[month_stats["This Month's Installations"].idxmax()]
         st.markdown(f"""
-        <div style="background: linear-gradient(135deg, #FFD700 0%, #FDB931 100%); padding: 20px; border-radius: 10px; color: #000; text-align: center; margin-bottom: 20px;">
-            <h2 style="margin:0; font-size: 1.5rem;">🌟 Top Installer This Month 🌟</h2>
-            <h1 style="margin:5px 0 0 0; font-size: 2.5rem;">{top_installer['Team Name']}</h1>
-            <p style="margin:0; font-size: 1.2rem;">{top_installer["This Month's Installations"]} Installations</p>
+        <div style="background-color: #f8f9fa; border: 1px solid #e0e0e0; border-left: 5px solid #e74c3c; padding: 20px; border-radius: 10px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between;">
+            <div>
+                <div style="color: #666; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 5px;">🏆 Top Installer This Month</div>
+                <div style="font-size: 1.8rem; font-weight: 700; color: #333; margin: 0;">{top_installer['Team Name']}</div>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 2rem; font-weight: 700; color: #e74c3c; margin: 0;">{top_installer["This Month's Installations"]}</div>
+                <div style="color: #666; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Installations</div>
+            </div>
         </div>
         """, unsafe_allow_html=True)
 
