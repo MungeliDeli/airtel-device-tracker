@@ -2,6 +2,8 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime, timedelta
 import io
+import requests
+import re
 
 st.set_page_config(page_title="Airtel Shop Tracker", page_icon="📡", layout="wide")
 
@@ -85,26 +87,71 @@ def resolve_columns(df, needed, label="file"):
     col_lookup = {c.strip().lower(): c for c in df.columns}
     rename_map = {}
     missing = []
+    
+    def clean_str(s): 
+        return re.sub(r'[^a-z0-9]', '', str(s).lower())
+        
+    clean_lookup = {clean_str(c): c for c in df.columns}
+
     for key, canonical in needed.items():
+        canonical_fuzzy = canonical.strip().lower()
+        canonical_clean = clean_str(canonical)
+        
         if canonical in df.columns:
             rename_map[canonical] = key
+        elif canonical_fuzzy in col_lookup:
+            rename_map[col_lookup[canonical_fuzzy]] = key
+        elif canonical_clean in clean_lookup:
+            rename_map[clean_lookup[canonical_clean]] = key
         else:
-            fuzzy = canonical.strip().lower()
-            if fuzzy in col_lookup:
-                rename_map[col_lookup[fuzzy]] = key
-            else:
-                missing.append(canonical)
-                df[canonical] = "Unknown"
-                rename_map[canonical] = key
+            missing.append(canonical)
+            df[canonical] = "Unknown"
+            rename_map[canonical] = key
     if missing:
         st.warning(f"⚠️ **{label}** — missing expected columns: {missing}. These will be marked as 'Unknown'.")
     return df.rename(columns=rename_map)[list(needed.keys())].copy()
 
-def load_kobo(file):
-    df = read_file(file)
-    if df is None:
+@st.cache_data(ttl=600)
+def fetch_kobo_data():
+    try:
+        token = st.secrets["kobo"]["API_TOKEN"]
+        form_id = st.secrets["kobo"]["FORM_ID"]
+        server_url = st.secrets["kobo"]["SERVER_URL"].rstrip("/")
+    except Exception:
+        st.error("❌ Kobo credentials not found. Please add them to `.streamlit/secrets.toml`.")
         return None
-    df = resolve_columns(df, KOBO_COLS, label="Kobo file")
+
+    if token == "your_api_token_here" or form_id == "your_form_id_here":
+        st.error("❌ Please update your `.streamlit/secrets.toml` with real Kobo credentials.")
+        return None
+
+    url = f"{server_url}/api/v2/assets/{form_id}/data.json"
+    headers = {"Authorization": f"Token {token}"}
+    
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+        results = data.get("results", [])
+        if not results:
+            st.warning("⚠️ No data found in the Kobo form.")
+            return pd.DataFrame()
+            
+        df = pd.DataFrame(results)
+        return df
+    except Exception as e:
+        st.error(f"❌ Failed to fetch data from Kobo API: {e}")
+        return None
+
+def load_kobo():
+    df = fetch_kobo_data()
+    if df is None or df.empty:
+        return None
+        
+    # Kobo JSON uses paths for nested groups, extract the last part
+    df.columns = [c.split('/')[-1] for c in df.columns]
+    
+    df = resolve_columns(df, KOBO_COLS, label="Kobo API")
     if df is None:
         return None
     df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
@@ -156,16 +203,17 @@ with st.sidebar:
     app_mode = st.radio("Go to:", ["Team Performance", "Device Management"])
     
     st.divider()
-    st.header("📂 Upload Files")
-    kobo_file = st.file_uploader(
-        "1. KoboToolbox export (.xlsx)",
-        type=["xlsx", "xls", "csv"],
-    )
+    st.header("🔄 KoboToolbox Data")
+    if st.button("Refresh Kobo Data"):
+        st.cache_data.clear()
+        st.success("Cache cleared! Data will be fetched afresh.")
     
     signout_file = None
     if app_mode == "Device Management":
+        st.divider()
+        st.header("📂 Upload Files")
         signout_file = st.file_uploader(
-            "2. Sign-out file (Google Sheet export)",
+            "Sign-out file (Google Sheet export)",
             type=["xlsx", "xls", "csv"],
         )
 
@@ -177,11 +225,9 @@ today_dt = datetime.today().date()
 
 # ── TEAM PERFORMANCE ──────────────────────────────────────────────────────────
 if app_mode == "Team Performance":
-    if not kobo_file:
-        st.info("👋 Welcome to Team Performance. Please upload the **KoboToolbox export (.xlsx)** in the sidebar to view the dashboard.")
-        st.stop()
+    with st.spinner("Fetching data from KoboToolbox..."):
+        kobo = load_kobo()
         
-    kobo = load_kobo(kobo_file)
     if kobo is None:
         st.stop()
         
@@ -234,7 +280,7 @@ if app_mode == "Team Performance":
         </div>
         """, unsafe_allow_html=True)
 
-    st.markdown('<div class="section-title">🏆 Overall Team Performance</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Overall Team Performance</div>', unsafe_allow_html=True)
     
     # Team Totals
     t_today = stats_df["Today's Installations"].sum()
@@ -251,7 +297,7 @@ if app_mode == "Team Performance":
     st.markdown("<br>", unsafe_allow_html=True)
     st.dataframe(stats_df, use_container_width=True, hide_index=True)
     
-    st.markdown('<div class="section-title">🔍 Installer Drill-Down</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-title">Installer Drill-Down</div>', unsafe_allow_html=True)
     
     # Selectbox for installer
     installer_options = [f"{row['Team Name']} (CUG: {row['CUG']})" for _, row in stats_df.iterrows()]
@@ -313,24 +359,25 @@ elif app_mode == "Device Management":
             date_from = st.date_input("From", today_dt - timedelta(days=7))
             date_to   = st.date_input("To",   today_dt)
 
-    if not kobo_file and not signout_file:
+    if not signout_file:
         st.markdown("""
         ### How to use Device Management
-        **Step 1 — Kobo file:** KoboToolbox → Data → Downloads → **XLS** → open in Excel → Save As → **.xlsx** → upload here.
+        **Step 1:** Kobo data is now fetched automatically from the API!
 
         **Step 2 — Sign-out file:** Google Sheet → File → Download → **.xlsx** → upload here.
 
         **Step 3:** Set the date filter. Report is ready instantly.
 
         ---
-        > You can upload **just the Kobo file** to browse installations without reconciliation.
+        > You can view Kobo installations directly by selecting a date range below without uploading a sign-out file.
         """)
-        st.stop()
+
+    with st.spinner("Fetching data from KoboToolbox..."):
+        kobo = load_kobo()
 
     # ── KOBO ONLY ──
-    if kobo_file and not signout_file:
+    if not signout_file:
         st.info("Showing **installations only**. Upload the sign-out file too to enable reconciliation.", icon="ℹ️")
-        kobo = load_kobo(kobo_file)
 
         if debug:
             if kobo is not None:
@@ -373,67 +420,8 @@ elif app_mode == "Device Management":
         st.dataframe(summary, use_container_width=True, hide_index=True)
         st.stop()
 
-    # ── SIGN-OUT ONLY ──
-    if signout_file and not kobo_file:
-        signout = None
-        df = read_file(signout_file)
-        detected = detect_file_type(df) if df is not None else None
-
-        if detected == "kobo":
-            st.warning("This upload looks like a Kobo export. Showing Kobo installations instead.")
-            kobo = load_kobo(signout_file)
-            if kobo is None: st.stop()
-            kobo_f = filter_by_date(kobo, date_from, date_to)
-            
-            if kobo_f.empty:
-                st.warning(f"No installations found between {date_from} and {date_to}. Try changing the date filter.")
-                st.stop()
-
-            st.markdown(f"### Installations — {date_from} to {date_to}")
-            installers = ["All"] + sorted(kobo_f["cug"].dropna().unique().tolist())
-            selected   = st.selectbox("Filter by installer CUG", installers)
-            view = kobo_f if selected == "All" else kobo_f[kobo_f["cug"] == selected]
-
-            disp = view.rename(columns={
-                "cug":"Installer CUG","phone":"Customer Phone",
-                "area":"Area","imei":"IMEI","odu":"ODU Number","date":"Date"
-            })
-            st.dataframe(disp[["Installer CUG","Customer Phone","Area","IMEI","ODU Number","Date"]],
-                         use_container_width=True, hide_index=True)
-            st.stop()
-
-        st.info("Showing **sign-out data only**. Upload the Kobo file to reconcile installations.", icon="ℹ️")
-        signout = load_signout(signout_file)
-
-        if debug:
-            if signout is not None:
-                st.success(f"✅ Sign-out loaded: {len(signout)} rows")
-            else:
-                st.warning("Sign-out returned None — see error above.")
-
-        if signout is None: st.stop()
-
-        signout_f = filter_by_date(signout, date_from, date_to)
-
-        if signout_f.empty:
-            st.warning(f"No sign-outs found between {date_from} and {date_to}. Try changing the date filter.")
-            st.stop()
-
-        st.markdown(f"### Sign-outs — {date_from} to {date_to}")
-        installers = ["All"] + sorted(signout_f["cug"].dropna().unique().tolist())
-        selected   = st.selectbox("Filter by installer CUG", installers)
-        view = signout_f if selected == "All" else signout_f[signout_f["cug"] == selected]
-
-        disp = view.rename(columns={
-            "cug":"Installer CUG","imei":"IMEI","date":"Sign-out Date"
-        })
-        st.dataframe(disp[["Installer CUG","IMEI","Sign-out Date"]],
-                     use_container_width=True, hide_index=True)
-        st.stop()
-
     # ── FULL MODE ──
-    if kobo_file and signout_file:
-        kobo    = load_kobo(kobo_file)
+    if signout_file:
         signout = load_signout(signout_file)
 
         if kobo is None or signout is None:
