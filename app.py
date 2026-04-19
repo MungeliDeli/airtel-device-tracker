@@ -50,7 +50,7 @@ KOBO_COLS = {
     "phone": "Customer_Phone_Number",
     "area":  "Area_of_Installation",
     "imei":  "ODU_IMEI_Number",
-    "odu":   "ODU_IMEI_Number",
+    "odu":   "ODU_Number",
     "date":  "_submission_time",
 }
 FORM_COLS = {
