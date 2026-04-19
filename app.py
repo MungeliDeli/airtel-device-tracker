@@ -45,13 +45,13 @@ TEAM_MEMBERS = {
 }
 
 KOBO_COLS = {
-    "cug":   "Installer Number (CUG)",
-    "customer": "Customer Name",
-    "phone": "Correct Customer Phone Number",
-    "area":  "Area of Installation",
-    "imei":  "IIMEI Number",
-    "odu":   "ODU Number",
-    "date":  "Submission Date",
+    "cug":   "Installer_Number_CUG",
+    "customer": "Customer_Name",
+    "phone": "Customer_Phone_Number",
+    "area":  "Area_of_Installation",
+    "imei":  "ODU_IMEI_Number",
+    "odu":   "ODU_IMEI_Number",
+    "date":  "_submission_time",
 }
 FORM_COLS = {
     "cug":  "Installer CUG",
@@ -239,6 +239,7 @@ if app_mode == "Team Performance":
     
     if kobo_team.empty:
         st.warning("No data found for the specified team members in this file.")
+        st.info(f"**Debug - Unique CUGs in data:** {kobo['cug'].unique().tolist()}")
         st.stop()
 
     # Calculate performance metrics
