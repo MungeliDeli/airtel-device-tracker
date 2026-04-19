@@ -109,6 +109,7 @@ def resolve_columns(df, needed, label="file"):
             rename_map[canonical] = key
     if missing:
         st.warning(f"⚠️ **{label}** — missing expected columns: {missing}. These will be marked as 'Unknown'.")
+        st.info(f"**Available columns in the raw data:** {df.columns.tolist()}")
     return df.rename(columns=rename_map)[list(needed.keys())].copy()
 
 @st.cache_data(ttl=600)
@@ -155,8 +156,9 @@ def load_kobo():
     if df is None:
         return None
     df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
-    df["imei"] = df["imei"].astype(str).str.strip()
-    df["cug"]  = df["cug"].astype(str).str.strip()
+    # Ensure CUG numbers don't have .0 at the end if they came in as floats
+    df["imei"] = df["imei"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
+    df["cug"]  = df["cug"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
     return df
 
 def load_signout(file):
