@@ -90,3 +90,42 @@ def remove_supervisor(username):
             return True, "Supervisor and all their installers removed."
         return False, "Supervisor not found."
     return False, "Database connection error."
+
+def sync_installations_to_mongo(df):
+    """
+    Takes a pandas DataFrame of Kobo installations and upserts them
+    into the 'installations' collection in MongoDB based on 'imei'.
+    """
+    db = get_db()
+    if db is None or df is None or df.empty:
+        return False, "Database error or no data to sync."
+    
+    # Convert dataframe to a list of dicts for MongoDB
+    records = df.to_dict("records")
+    upserted_count = 0
+    
+    try:
+        for record in records:
+            # We must have an imei to use as a unique key
+            imei = str(record.get("imei", "")).strip()
+            if not imei or imei.lower() == "nan" or imei.lower() == "unknown":
+                continue # Skip records without a valid IMEI
+                
+            db.installations.update_one(
+                {"imei": imei},
+                {"$set": record},
+                upsert=True
+            )
+            upserted_count += 1
+            
+        return True, f"Successfully synced {upserted_count} installations."
+    except Exception as e:
+        return False, f"Error during sync: {e}"
+
+def get_all_installations():
+    """Retrieves all synced installations from MongoDB."""
+    db = get_db()
+    if db is not None:
+        return list(db.installations.find())
+    return []
+

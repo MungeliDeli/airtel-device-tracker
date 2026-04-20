@@ -85,7 +85,7 @@ def load_kobo():
     if df is None:
         return None
         
-    df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.date
+    df["date"] = pd.to_datetime(df["date"], errors="coerce").dt.strftime('%Y-%m-%d')
     df["imei"] = df["imei"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
     df["cug"]  = df["cug"].astype(str).str.replace(r'\.0$', '', regex=True).str.strip()
     return df

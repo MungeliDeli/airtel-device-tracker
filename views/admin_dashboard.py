@@ -1,9 +1,12 @@
 import streamlit as st
 from database import (
     get_supervisors, create_supervisor, remove_supervisor,
-    add_installer, get_installers_by_supervisor, remove_installer
+    add_installer, get_installers_by_supervisor, remove_installer,
+    sync_installations_to_mongo, get_all_installations, get_all_installers
 )
 import pandas as pd
+from datetime import datetime, timedelta
+from kobo_api import load_kobo
 
 
 def validate_cug(cug: str):
@@ -22,8 +25,80 @@ def show(app_mode):
 
     if app_mode == "Global Performance":
         st.header("Global Performance")
-        st.info("Here we will show the combined metrics for ALL installers across ALL supervisors.")
-        st.write("Placeholder: Kobo Data aggregation will appear here.")
+        
+        # ── 1. Sync Button ──
+        col1, col2 = st.columns([3, 1])
+        col1.info("Combined metrics for ALL installers across ALL supervisors.")
+        if col2.button("🔄 Sync Latest Data from Kobo", use_container_width=True):
+            with st.spinner("Fetching from Kobo..."):
+                kobo_df = load_kobo()
+                if kobo_df is not None and not kobo_df.empty:
+                    success, msg = sync_installations_to_mongo(kobo_df)
+                    if success:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+                else:
+                    st.warning("No data returned from Kobo API.")
+        
+        st.divider()
+        
+        # ── 2. Load Data ──
+        installations = get_all_installations()
+        if not installations:
+            st.warning("No installations found in the database. Please sync data from Kobo.")
+        else:
+            df_inst = pd.DataFrame(installations)
+            
+            # Ensure date is datetime
+            df_inst['date'] = pd.to_datetime(df_inst['date'], errors='coerce')
+            
+            # Get all installers to map cug -> supervisor and name
+            all_installers = get_all_installers()
+            installer_map = {inst.get("cug_number"): inst for inst in all_installers}
+            
+            def get_installer_name(cug):
+                return installer_map.get(cug, {}).get("name", "Unknown")
+                
+            def get_supervisor(cug):
+                return installer_map.get(cug, {}).get("supervisor_username", "Unassigned")
+                
+            df_inst["Installer Name"] = df_inst["cug"].apply(get_installer_name)
+            df_inst["Supervisor"] = df_inst["cug"].apply(get_supervisor)
+            
+            # ── 3. Top Level Metrics ──
+            today_dt = datetime.today()
+            start_of_week = today_dt - timedelta(days=today_dt.weekday())
+            start_of_month = today_dt.replace(day=1)
+            
+            t_all = len(df_inst)
+            t_today = len(df_inst[df_inst['date'].dt.date == today_dt.date()])
+            t_week = len(df_inst[df_inst['date'] >= start_of_week])
+            t_month = len(df_inst[df_inst['date'] >= start_of_month])
+            
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Today's Total", t_today)
+            c2.metric("This Week's Total", t_week)
+            c3.metric("This Month's Total", t_month)
+            c4.metric("All Time Total", t_all)
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            
+            # ── 4. Tables ──
+            tab1, tab2 = st.tabs(["Supervisor Performance", "Installer Performance"])
+            
+            with tab1:
+                st.subheader("Installations per Supervisor")
+                sup_perf = df_inst.groupby("Supervisor").size().reset_index(name="Total Installations")
+                sup_perf = sup_perf.sort_values("Total Installations", ascending=False)
+                st.dataframe(sup_perf, use_container_width=True, hide_index=True)
+                
+            with tab2:
+                st.subheader("Installations per Installer")
+                inst_perf = df_inst.groupby(["Installer Name", "cug", "Supervisor"]).size().reset_index(name="Total Installations")
+                inst_perf = inst_perf.rename(columns={"cug": "CUG Number"})
+                inst_perf = inst_perf.sort_values("Total Installations", ascending=False)
+                st.dataframe(inst_perf, use_container_width=True, hide_index=True)
 
     elif app_mode == "Manage Supervisors & Installers":
         st.header("Manage Supervisors & Installers")
