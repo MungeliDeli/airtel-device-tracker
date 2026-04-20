@@ -1,5 +1,6 @@
 import streamlit as st
 import auth
+from views import admin_dashboard, supervisor_dashboard
 
 # Set page config FIRST
 st.set_page_config(page_title="Airtel Shop Tracker V2", layout="wide")
@@ -55,10 +56,8 @@ if st.sidebar.button("Logout"):
 
 # Route to the appropriate view based on role
 if role == "admin":
-    from views import admin_dashboard
     admin_dashboard.show(app_mode)
 elif role == "supervisor":
-    from views import supervisor_dashboard
     supervisor_dashboard.show(app_mode)
 else:
     st.error("Unknown role encountered.")
