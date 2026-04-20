@@ -24,16 +24,30 @@ def get_user(username):
         return db.users.find_one({"username": username})
     return None
 
-def get_all_shops():
+def get_supervisors():
     db = get_db()
     if db is not None:
-        return list(db.shops.find())
+        return list(db.users.find({"role": "supervisor"}))
     return []
 
-def get_installers_by_shop(shop_id):
+def create_supervisor(username, password_hash, shop_name):
     db = get_db()
     if db is not None:
-        return list(db.installers.find({"shop_id": shop_id}))
+        if db.users.find_one({"username": username}):
+            return False, "Username already exists."
+        db.users.insert_one({
+            "username": username,
+            "password_hash": password_hash,
+            "role": "supervisor",
+            "shop_name": shop_name
+        })
+        return True, "Supervisor created successfully."
+    return False, "Database connection error."
+
+def get_installers_by_supervisor(supervisor_username):
+    db = get_db()
+    if db is not None:
+        return list(db.installers.find({"supervisor_username": supervisor_username}))
     return []
 
 def get_all_installers():
@@ -41,3 +55,16 @@ def get_all_installers():
     if db is not None:
         return list(db.installers.find())
     return []
+
+def add_installer(cug_number, name, supervisor_username):
+    db = get_db()
+    if db is not None:
+        if db.installers.find_one({"cug_number": cug_number}):
+            return False, "CUG Number already exists."
+        db.installers.insert_one({
+            "cug_number": cug_number,
+            "name": name,
+            "supervisor_username": supervisor_username
+        })
+        return True, "Installer assigned successfully."
+    return False, "Database connection error."

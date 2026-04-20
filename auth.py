@@ -19,7 +19,7 @@ def check_password():
                 st.session_state["password_correct"] = True
                 st.session_state["logged_in_user"] = username
                 st.session_state["role"] = user_doc.get("role", "supervisor")
-                st.session_state["shop_id"] = user_doc.get("shop_id")
+                st.session_state["shop_name"] = user_doc.get("shop_name", "Admin")
                 del st.session_state["password_input"]  # clear from memory
                 return
 
@@ -42,7 +42,7 @@ def check_password():
 
 def logout():
     """Logs the user out by clearing session state."""
-    keys_to_clear = ["password_correct", "logged_in_user", "role", "shop_id"]
+    keys_to_clear = ["password_correct", "logged_in_user", "role", "shop_name"]
     for key in keys_to_clear:
         if key in st.session_state:
             del st.session_state[key]

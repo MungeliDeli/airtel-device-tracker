@@ -3,27 +3,26 @@ import pandas as pd
 from datetime import datetime, timedelta
 from kobo_api import load_kobo
 from google_sheets_api import load_signout
-from database import get_installers_by_shop
+from database import get_installers_by_supervisor
 
-def show():
-    st.title("Airtel Shop Tracker - Supervisor Dashboard")
+def show(app_mode):
+    st.title("Supervisor Dashboard")
     
-    shop_id = st.session_state.get('shop_id')
+    username = st.session_state.get('logged_in_user')
+    shop_name = st.session_state.get('shop_name', 'Unknown Shop')
     
-    # 1. Get the installers specifically for this shop
-    installers_docs = get_installers_by_shop(shop_id)
+    # 1. Get the installers specifically assigned to this supervisor
+    installers_docs = get_installers_by_supervisor(username)
     if not installers_docs:
-        st.warning("⚠️ No installers are assigned to your shop in the database.")
+        st.warning("⚠️ No installers are assigned to you yet.")
         st.stop()
         
     # Create a dictionary of {cug_number: name} for easy mapping
     my_team = {doc.get("cug_number"): doc.get("name") for doc in installers_docs}
     
-    st.caption(f"Welcome, Supervisor {st.session_state.get('logged_in_user')}! Managing {len(my_team)} installers.")
+    st.caption(f"Shop: {shop_name} | Managing {len(my_team)} installers.")
 
-    tabs = st.tabs(["Team Performance", "Device Reconciliation"])
-    
-    with tabs[0]:
+    if app_mode == "Team Performance":
         st.header("Your Team's Performance")
         with st.spinner("Fetching data from KoboToolbox..."):
             kobo = load_kobo()
@@ -31,7 +30,7 @@ def show():
         if kobo is None:
             st.stop()
             
-        # CRITICAL RBAC STEP: Filter Kobo data so it ONLY contains CUGs belonging to this shop
+        # CRITICAL RBAC STEP: Filter Kobo data so it ONLY contains CUGs belonging to this supervisor
         my_kobo_data = kobo[kobo["cug"].isin(my_team.keys())].copy()
         my_kobo_data["Installer Name"] = my_kobo_data["cug"].map(my_team)
         
@@ -42,7 +41,7 @@ def show():
             # The rest of the performance metrics logic from the original app goes here...
             st.dataframe(my_kobo_data[["Installer Name", "cug", "imei", "date"]].head(10), hide_index=True)
 
-    with tabs[1]:
+    elif app_mode == "Device Reconciliation":
         st.header("Device Reconciliation")
         st.info("Reading sign-out data directly from Google Sheets...")
         
@@ -50,7 +49,7 @@ def show():
             signout = load_signout()
             
         if signout is not None:
-            # CRITICAL RBAC STEP: Filter sign-out data for this shop only
+            # CRITICAL RBAC STEP: Filter sign-out data for this supervisor's team only
             my_signouts = signout[signout["cug"].isin(my_team.keys())].copy()
             st.success(f"Loaded {len(my_signouts)} sign-out records for your team.")
             

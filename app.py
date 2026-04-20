@@ -30,7 +30,22 @@ if not auth.check_password():
     st.stop()
 
 # If we get here, the user is logged in
+role = st.session_state.get("role")
+
 st.sidebar.title("Airtel Tracker")
+
+# Navigation in the middle
+st.sidebar.header("Navigation")
+if role == "admin":
+    app_mode = st.sidebar.radio("Go to:", ["Global Performance", "Manage Supervisors & Installers"])
+elif role == "supervisor":
+    app_mode = st.sidebar.radio("Go to:", ["Team Performance", "Device Reconciliation"])
+else:
+    app_mode = None
+
+st.sidebar.divider()
+
+# Bottom of sidebar for user info
 st.sidebar.write(f"Logged in as: **{st.session_state['logged_in_user']}**")
 st.sidebar.write(f"Role: **{st.session_state['role'].capitalize()}**")
 
@@ -38,16 +53,12 @@ if st.sidebar.button("Logout"):
     auth.logout()
     st.rerun()
 
-st.sidebar.divider()
-
 # Route to the appropriate view based on role
-role = st.session_state.get("role")
-
 if role == "admin":
     from views import admin_dashboard
-    admin_dashboard.show()
+    admin_dashboard.show(app_mode)
 elif role == "supervisor":
     from views import supervisor_dashboard
-    supervisor_dashboard.show()
+    supervisor_dashboard.show(app_mode)
 else:
     st.error("Unknown role encountered.")
