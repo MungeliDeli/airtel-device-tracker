@@ -1,6 +1,6 @@
 import streamlit as st
 from database import (
-    get_supervisors, create_supervisor,
+    get_supervisors, create_supervisor, remove_supervisor,
     add_installer, get_installers_by_supervisor, remove_installer
 )
 import pandas as pd
@@ -30,22 +30,56 @@ def show(app_mode):
 
         supervisors = get_supervisors()
 
-        # ── 1. Summary Table ──────────────────────────────────────────────────
+        # Initialise confirm-delete states
+        if "confirm_delete_sup" not in st.session_state:
+            st.session_state.confirm_delete_sup = None
+        if "confirm_delete_cug" not in st.session_state:
+            st.session_state.confirm_delete_cug = None
+
+        # ── 1. Supervisors Table with Remove ─────────────────────────────────
         st.subheader("Current Supervisors")
         if not supervisors:
             st.warning("No supervisors found in database yet.")
         else:
-            table_data = []
+            # Table header
+            hcols = st.columns([3, 3, 2, 1])
+            hcols[0].markdown("**Supervisor Username**")
+            hcols[1].markdown("**Shop Name**")
+            hcols[2].markdown("**No. of Installers**")
+            hcols[3].markdown("**Remove**")
+
             for sup in supervisors:
                 username  = sup.get("username")
                 shop_name = sup.get("shop_name", "Unknown")
                 count     = len(get_installers_by_supervisor(username))
-                table_data.append({
-                    "Supervisor Username":  username,
-                    "Shop Name":           shop_name,
-                    "Number of Installers": count,
-                })
-            st.dataframe(pd.DataFrame(table_data), use_container_width=True, hide_index=True)
+
+                row = st.columns([3, 3, 2, 1])
+                row[0].write(username)
+                row[1].write(shop_name)
+                row[2].write(count)
+
+                # Confirm state for this supervisor
+                if st.session_state.confirm_delete_sup == username:
+                    confirm_cols = st.columns([1, 1, 4])
+                    if confirm_cols[0].button("Yes, remove", key=f"yes_sup_{username}", type="primary"):
+                        success, msg = remove_supervisor(username)
+                        if success:
+                            st.success(f"✅ Supervisor **{username}** and all their installers have been removed.")
+                        else:
+                            st.error(f"❌ {msg}")
+                        st.session_state.confirm_delete_sup = None
+                        st.rerun()
+                    if confirm_cols[1].button("Cancel", key=f"cancel_sup_{username}"):
+                        st.session_state.confirm_delete_sup = None
+                        st.rerun()
+                    confirm_cols[2].warning(
+                        f"⚠️ This will permanently remove **{username}** "
+                        f"and all **{count}** installer(s) under them. This cannot be undone."
+                    )
+                else:
+                    if row[3].button("🗑️", key=f"del_sup_{username}", help=f"Remove {username}"):
+                        st.session_state.confirm_delete_sup = username
+                        st.rerun()
 
         # ── 2. Installer Drill-Down ───────────────────────────────────────────
         st.divider()
@@ -69,32 +103,23 @@ def show(app_mode):
                 else:
                     st.markdown(f"**{len(installers)} installer(s) under {selected_sup}**")
 
-                    # Initialise confirm-delete state
-                    if "confirm_delete_cug" not in st.session_state:
-                        st.session_state.confirm_delete_cug = None
-
-                    # Render each installer as a row with a delete button
-                    header_cols = st.columns([3, 3, 1])
-                    header_cols[0].markdown("**Installer Name**")
-                    header_cols[1].markdown("**CUG Number**")
-                    header_cols[2].markdown("**Remove**")
+                    # Table header
+                    hcols2 = st.columns([4, 3, 1])
+                    hcols2[0].markdown("**Installer Name**")
+                    hcols2[1].markdown("**CUG Number**")
+                    hcols2[2].markdown("**Remove**")
 
                     for inst in installers:
                         cug  = inst.get("cug_number")
                         name = inst.get("name")
 
-                        row_cols = st.columns([3, 3, 1])
+                        row_cols = st.columns([4, 3, 1])
                         row_cols[0].write(name)
                         row_cols[1].write(cug)
 
-                        # First click → ask for confirmation
                         if st.session_state.confirm_delete_cug == cug:
-                            # Show inline confirmation
-                            confirm_cols = st.columns([3, 1, 1])
-                            confirm_cols[0].warning(
-                                f"⚠️ Are you sure you want to remove **{name}** ({cug})?"
-                            )
-                            if confirm_cols[1].button("Yes, remove", key=f"yes_{cug}", type="primary"):
+                            confirm_cols = st.columns([1, 1, 4])
+                            if confirm_cols[0].button("Yes, remove", key=f"yes_inst_{cug}", type="primary"):
                                 success, msg = remove_installer(cug)
                                 if success:
                                     st.success(f"✅ **{name}** has been removed.")
@@ -102,11 +127,12 @@ def show(app_mode):
                                     st.error(f"❌ {msg}")
                                 st.session_state.confirm_delete_cug = None
                                 st.rerun()
-                            if confirm_cols[2].button("Cancel", key=f"cancel_{cug}"):
+                            if confirm_cols[1].button("Cancel", key=f"cancel_inst_{cug}"):
                                 st.session_state.confirm_delete_cug = None
                                 st.rerun()
+                            confirm_cols[2].warning(f"⚠️ Remove **{name}** ({cug})?")
                         else:
-                            if row_cols[2].button("🗑️", key=f"del_{cug}", help=f"Remove {name}"):
+                            if row_cols[2].button("🗑️", key=f"del_inst_{cug}", help=f"Remove {name}"):
                                 st.session_state.confirm_delete_cug = cug
                                 st.rerun()
 
@@ -150,8 +176,8 @@ def show(app_mode):
             sup_usernames = [s.get("username") for s in supervisors] if supervisors else []
 
             with st.form(f"inst_form_{st.session_state.inst_form_key}", clear_on_submit=True):
-                new_cug      = st.text_input("Installer CUG Number", placeholder="e.g. 978982901")
-                new_name     = st.text_input("Installer Full Name")
+                new_cug           = st.text_input("Installer CUG Number", placeholder="e.g. 978982901")
+                new_name          = st.text_input("Installer Full Name")
                 selected_sup_form = st.selectbox(
                     "Assign to Supervisor",
                     sup_usernames if sup_usernames else ["— Create a supervisor first —"],

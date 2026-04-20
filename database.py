@@ -77,3 +77,16 @@ def remove_installer(cug_number):
             return True, "Installer removed successfully."
         return False, "Installer not found."
     return False, "Database connection error."
+
+def remove_supervisor(username):
+    """Removes a supervisor and ALL of their assigned installers."""
+    db = get_db()
+    if db is not None:
+        # Cascade — delete all installers under this supervisor first
+        db.installers.delete_many({"supervisor_username": username})
+        # Then delete the supervisor user account
+        result = db.users.delete_one({"username": username, "role": "supervisor"})
+        if result.deleted_count > 0:
+            return True, "Supervisor and all their installers removed."
+        return False, "Supervisor not found."
+    return False, "Database connection error."
