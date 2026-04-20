@@ -197,7 +197,7 @@ def days_ago(d, today):
     return "Today" if delta == 0 else f"{delta}d ago"
 
 # ── Sidebar ───────────────────────────────────────────────────────────────────
-st.title("📡 Airtel Shop Tracker")
+st.title("Airtel Shop Tracker")
 st.caption("Track device sign-outs and team installation performance.")
 
 with st.sidebar:
