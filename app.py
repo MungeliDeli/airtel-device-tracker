@@ -228,8 +228,52 @@ today_dt = datetime.today().date()
 # ── TEAM PERFORMANCE ──────────────────────────────────────────────────────────
 if app_mode == "Team Performance":
     with st.spinner("Fetching data from KoboToolbox..."):
+        raw_kobo = fetch_kobo_data()
         kobo = load_kobo()
         
+    if debug and raw_kobo is not None and not raw_kobo.empty:
+        st.markdown('### 🔍 RAW Kobo API Debug')
+        # Show raw columns before any mapping
+        raw_cols = list(raw_kobo.columns)
+        raw_simplified = [c.split('/')[-1] for c in raw_cols]
+        
+        with st.expander("📋 Raw API Column Names (before mapping)", expanded=True):
+            col_debug = pd.DataFrame({
+                "Full API Path": raw_cols,
+                "Simplified (last segment)": raw_simplified
+            })
+            st.dataframe(col_debug, use_container_width=True, hide_index=True)
+        
+        with st.expander("📊 Raw API Data Sample (first 5 rows)", expanded=True):
+            # Show simplified columns with first 5 rows
+            raw_display = raw_kobo.copy()
+            raw_display.columns = raw_simplified
+            st.dataframe(raw_display.head(5), use_container_width=True)
+        
+        # Specifically search for phone/imei/odu related columns
+        with st.expander("🔎 Columns matching 'phone', 'imei', 'odu', 'customer'", expanded=True):
+            keywords = ['phone', 'imei', 'odu', 'customer', 'msisdn', 'number', 'serial']
+            matches = []
+            for full_col, short_col in zip(raw_cols, raw_simplified):
+                for kw in keywords:
+                    if kw in full_col.lower() or kw in short_col.lower():
+                        # Get a sample value from this column
+                        sample_val = raw_kobo[full_col].dropna().head(1).tolist()
+                        sample = sample_val[0] if sample_val else "N/A"
+                        matches.append({
+                            "Keyword": kw,
+                            "Full Path": full_col,
+                            "Short Name": short_col,
+                            "Sample Value": str(sample)[:100]
+                        })
+                        break
+            if matches:
+                st.dataframe(pd.DataFrame(matches), use_container_width=True, hide_index=True)
+            else:
+                st.warning("No columns matched the keywords. Check raw columns above.")
+        
+        st.divider()
+
     if kobo is None:
         st.stop()
         
@@ -375,6 +419,7 @@ elif app_mode == "Device Management":
         """)
 
     with st.spinner("Fetching data from KoboToolbox..."):
+        raw_kobo = fetch_kobo_data()
         kobo = load_kobo()
 
     # ── KOBO ONLY ──
@@ -382,9 +427,35 @@ elif app_mode == "Device Management":
         st.info("Showing **installations only**. Upload the sign-out file too to enable reconciliation.", icon="ℹ️")
 
         if debug:
+            if raw_kobo is not None and not raw_kobo.empty:
+                st.markdown('### 🔍 RAW Kobo API Debug')
+                raw_cols = list(raw_kobo.columns)
+                raw_simplified = [c.split('/')[-1] for c in raw_cols]
+                with st.expander("📋 Raw API Column Names", expanded=True):
+                    col_debug = pd.DataFrame({
+                        "Full API Path": raw_cols,
+                        "Simplified": raw_simplified
+                    })
+                    st.dataframe(col_debug, use_container_width=True, hide_index=True)
+                with st.expander("🔎 Columns matching phone/imei/odu/customer", expanded=True):
+                    keywords = ['phone', 'imei', 'odu', 'customer', 'msisdn', 'number', 'serial']
+                    matches = []
+                    for full_col, short_col in zip(raw_cols, raw_simplified):
+                        for kw in keywords:
+                            if kw in full_col.lower() or kw in short_col.lower():
+                                sample_val = raw_kobo[full_col].dropna().head(1).tolist()
+                                sample = sample_val[0] if sample_val else "N/A"
+                                matches.append({"Keyword": kw, "Full Path": full_col, "Short Name": short_col, "Sample Value": str(sample)[:100]})
+                                break
+                    if matches:
+                        st.dataframe(pd.DataFrame(matches), use_container_width=True, hide_index=True)
+                    else:
+                        st.warning("No columns matched the keywords.")
+                st.divider()
+
             if kobo is not None:
-                st.success(f"✅ Kobo loaded: {len(kobo)} rows")
-                st.write("**Column names found:**", list(kobo.columns))
+                st.success(f"✅ Kobo loaded (after mapping): {len(kobo)} rows")
+                st.write("**Mapped column names:**", list(kobo.columns))
                 st.dataframe(kobo.head(3))
             else:
                 st.warning("Kobo returned None — see error above.")
