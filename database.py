@@ -68,3 +68,12 @@ def add_installer(cug_number, name, supervisor_username):
         })
         return True, "Installer assigned successfully."
     return False, "Database connection error."
+
+def remove_installer(cug_number):
+    db = get_db()
+    if db is not None:
+        result = db.installers.delete_one({"cug_number": cug_number})
+        if result.deleted_count > 0:
+            return True, "Installer removed successfully."
+        return False, "Installer not found."
+    return False, "Database connection error."
