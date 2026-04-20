@@ -47,10 +47,10 @@ TEAM_MEMBERS = {
 KOBO_COLS = {
     "cug":   "Installer_Number_CUG",
     "customer": "Customer_Name",
-    "phone": "Customer_Phone_Number",
+    "phone": "Correct_Customer_Phone_Number",
     "area":  "Area_of_Installation",
-    "imei":  "ODU_IMEI_Number",
-    "odu":   "ODU_IMEI_Number",
+    "imei":  "IIMEI_Number",
+    "odu":   "ODU_Number",
     "date":  "_submission_time",
 }
 FORM_COLS = {
