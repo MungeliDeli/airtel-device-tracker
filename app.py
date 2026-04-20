@@ -5,7 +5,7 @@ import io
 import requests
 import re
 
-st.set_page_config(page_title="Airtel Shop Tracker", page_icon="📡", layout="wide")
+st.set_page_config(page_title="Airtel Shop Tracker", layout="wide")
 
 st.markdown("""
 <style>
@@ -201,11 +201,11 @@ st.title("📡 Airtel Shop Tracker")
 st.caption("Track device sign-outs and team installation performance.")
 
 with st.sidebar:
-    st.header("🧭 Navigation")
+    st.header("Navigation")
     app_mode = st.radio("Go to:", ["Team Performance", "Device Management"])
     
     st.divider()
-    st.header("🔄 KoboToolbox Data")
+    st.header("KoboToolbox Data")
     if st.button("Refresh Kobo Data"):
         st.cache_data.clear()
         st.success("Cache cleared! Data will be fetched afresh.")
@@ -219,8 +219,6 @@ with st.sidebar:
             type=["xlsx", "xls", "csv"],
         )
 
-    st.divider()
-    debug = st.checkbox("🛠 Show debug info", value=False)
     st.caption("Built for Airtel Shop Supervisor")
 
 today_dt = datetime.today().date()
@@ -228,52 +226,8 @@ today_dt = datetime.today().date()
 # ── TEAM PERFORMANCE ──────────────────────────────────────────────────────────
 if app_mode == "Team Performance":
     with st.spinner("Fetching data from KoboToolbox..."):
-        raw_kobo = fetch_kobo_data()
         kobo = load_kobo()
         
-    if debug and raw_kobo is not None and not raw_kobo.empty:
-        st.markdown('### 🔍 RAW Kobo API Debug')
-        # Show raw columns before any mapping
-        raw_cols = list(raw_kobo.columns)
-        raw_simplified = [c.split('/')[-1] for c in raw_cols]
-        
-        with st.expander("📋 Raw API Column Names (before mapping)", expanded=True):
-            col_debug = pd.DataFrame({
-                "Full API Path": raw_cols,
-                "Simplified (last segment)": raw_simplified
-            })
-            st.dataframe(col_debug, use_container_width=True, hide_index=True)
-        
-        with st.expander("📊 Raw API Data Sample (first 5 rows)", expanded=True):
-            # Show simplified columns with first 5 rows
-            raw_display = raw_kobo.copy()
-            raw_display.columns = raw_simplified
-            st.dataframe(raw_display.head(5), use_container_width=True)
-        
-        # Specifically search for phone/imei/odu related columns
-        with st.expander("🔎 Columns matching 'phone', 'imei', 'odu', 'customer'", expanded=True):
-            keywords = ['phone', 'imei', 'odu', 'customer', 'msisdn', 'number', 'serial']
-            matches = []
-            for full_col, short_col in zip(raw_cols, raw_simplified):
-                for kw in keywords:
-                    if kw in full_col.lower() or kw in short_col.lower():
-                        # Get a sample value from this column
-                        sample_val = raw_kobo[full_col].dropna().head(1).tolist()
-                        sample = sample_val[0] if sample_val else "N/A"
-                        matches.append({
-                            "Keyword": kw,
-                            "Full Path": full_col,
-                            "Short Name": short_col,
-                            "Sample Value": str(sample)[:100]
-                        })
-                        break
-            if matches:
-                st.dataframe(pd.DataFrame(matches), use_container_width=True, hide_index=True)
-            else:
-                st.warning("No columns matched the keywords. Check raw columns above.")
-        
-        st.divider()
-
     if kobo is None:
         st.stop()
         
@@ -321,7 +275,7 @@ if app_mode == "Team Performance":
             </div>
             <div style="text-align: right;">
                 <div style="font-size: 2rem; font-weight: 700;  margin: 0;">{top_installer["This Month's Installations"]}</div>
-                <div style="color: #666; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Installations</div>
+                <div style="font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em;">Installations</div>
             </div>
         </div>
         """, unsafe_allow_html=True)
@@ -419,54 +373,16 @@ elif app_mode == "Device Management":
         """)
 
     with st.spinner("Fetching data from KoboToolbox..."):
-        raw_kobo = fetch_kobo_data()
         kobo = load_kobo()
 
     # ── KOBO ONLY ──
     if not signout_file:
         st.info("Showing **installations only**. Upload the sign-out file too to enable reconciliation.", icon="ℹ️")
 
-        if debug:
-            if raw_kobo is not None and not raw_kobo.empty:
-                st.markdown('### 🔍 RAW Kobo API Debug')
-                raw_cols = list(raw_kobo.columns)
-                raw_simplified = [c.split('/')[-1] for c in raw_cols]
-                with st.expander("📋 Raw API Column Names", expanded=True):
-                    col_debug = pd.DataFrame({
-                        "Full API Path": raw_cols,
-                        "Simplified": raw_simplified
-                    })
-                    st.dataframe(col_debug, use_container_width=True, hide_index=True)
-                with st.expander("🔎 Columns matching phone/imei/odu/customer", expanded=True):
-                    keywords = ['phone', 'imei', 'odu', 'customer', 'msisdn', 'number', 'serial']
-                    matches = []
-                    for full_col, short_col in zip(raw_cols, raw_simplified):
-                        for kw in keywords:
-                            if kw in full_col.lower() or kw in short_col.lower():
-                                sample_val = raw_kobo[full_col].dropna().head(1).tolist()
-                                sample = sample_val[0] if sample_val else "N/A"
-                                matches.append({"Keyword": kw, "Full Path": full_col, "Short Name": short_col, "Sample Value": str(sample)[:100]})
-                                break
-                    if matches:
-                        st.dataframe(pd.DataFrame(matches), use_container_width=True, hide_index=True)
-                    else:
-                        st.warning("No columns matched the keywords.")
-                st.divider()
-
-            if kobo is not None:
-                st.success(f"✅ Kobo loaded (after mapping): {len(kobo)} rows")
-                st.write("**Mapped column names:**", list(kobo.columns))
-                st.dataframe(kobo.head(3))
-            else:
-                st.warning("Kobo returned None — see error above.")
-
         if kobo is None:
             st.stop()
 
         kobo_f = filter_by_date(kobo, date_from, date_to)
-
-        if debug:
-            st.info(f"After date filter ({date_from} → {date_to}): {len(kobo_f)} rows")
 
         if kobo_f.empty:
             st.warning(f"No installations found between {date_from} and {date_to}. Try changing the date filter.")
